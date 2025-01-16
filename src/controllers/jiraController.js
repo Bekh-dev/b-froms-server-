@@ -124,52 +124,94 @@ const getUserTickets = async (req, res) => {
 
     console.log('Fetching tickets for email:', email);
 
-    // Get account ID for the user
-    const accountId = await getAccountId(email);
-
-    if (!accountId) {
-      return res.status(400).json({ message: 'User not found' });
+    if (!email) {
+      console.error('No email provided');
+      return res.status(400).json({ 
+        message: 'Email is required',
+        error: 'No email provided in request parameters'
+      });
     }
 
-    console.log('Found account ID:', accountId);
+    // Get account ID for the user
+    const accountId = await getAccountId(email);
+    console.log('Account ID:', accountId);
+
+    if (!accountId) {
+      console.error('User not found for email:', email);
+      return res.status(400).json({ 
+        message: 'User not found',
+        error: `No Jira account found for email: ${email}`
+      });
+    }
 
     // Construct JQL query
     const jql = `project = "${JIRA_PROJECT_KEY}" AND reporter = "${accountId}" ORDER BY created DESC`;
-    console.log('Using JQL:', jql);
+    console.log('JQL Query:', jql);
 
     // Search for issues
+    console.log('Searching for issues...');
     const response = await jiraApi.get('/search', {
       params: {
         jql,
-        startAt,
+        startAt: parseInt(startAt, 10),
         maxResults: 50,
         fields: 'summary,description,priority,status,created,updated'
       }
     });
 
-    console.log('Found tickets:', response.data.total);
+    console.log('Jira API Response:', {
+      total: response.data.total,
+      issuesCount: response.data.issues?.length,
+      maxResults: response.data.maxResults,
+      startAt: response.data.startAt
+    });
+
+    if (!response.data.issues) {
+      console.error('No issues array in response:', response.data);
+      return res.json({
+        total: 0,
+        tickets: []
+      });
+    }
 
     // Transform the response
-    const tickets = response.data.issues.map(issue => ({
-      id: issue.id,
-      key: issue.key,
-      summary: issue.fields.summary,
-      description: issue.fields.description?.content?.[0]?.content?.[0]?.text || '',
-      priority: issue.fields.priority?.name || 'Medium',
-      status: issue.fields.status?.name || 'To Do',
-      created: issue.fields.created,
-      updated: issue.fields.updated
-    }));
-
-    res.json({
-      total: response.data.total,
-      tickets: tickets
+    const tickets = response.data.issues.map(issue => {
+      console.log('Processing issue:', issue.key);
+      return {
+        id: issue.id,
+        key: issue.key,
+        summary: issue.fields.summary || '',
+        description: issue.fields.description?.content?.[0]?.content?.[0]?.text || '',
+        priority: issue.fields.priority?.name || 'Medium',
+        status: issue.fields.status?.name || 'To Do',
+        created: issue.fields.created,
+        updated: issue.fields.updated
+      };
     });
+
+    console.log('Transformed tickets count:', tickets.length);
+
+    const result = {
+      total: response.data.total || 0,
+      tickets: tickets || []
+    };
+
+    console.log('Sending response:', {
+      total: result.total,
+      ticketsCount: result.tickets.length
+    });
+
+    res.json(result);
   } catch (error) {
-    console.error('Error fetching tickets:', error.response?.data || error.message);
+    console.error('Error fetching tickets:', {
+      message: error.message,
+      response: error.response?.data,
+      stack: error.stack
+    });
+
     res.status(error.response?.status || 500).json({
       message: 'Failed to fetch tickets',
-      error: error.response?.data || error.message
+      error: error.response?.data?.errorMessages || error.message
     });
   }
 };
