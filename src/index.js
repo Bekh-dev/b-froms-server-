@@ -8,10 +8,10 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:5173', 'https://bekh-dev.github.io/b-forms-client'],
+  origin: ['http://localhost:3000', 'http://localhost:5173', 'https://bekh-dev.github.io'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'Access-Control-Allow-Origin']
 }));
 app.use(express.json());
 
@@ -36,6 +36,9 @@ mongoose.connection.on('error', err => {
 mongoose.connection.on('disconnected', () => {
   console.log('MongoDB disconnected. Attempting to reconnect...');
 });
+
+// CORS preflight
+app.options('*', cors());
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
