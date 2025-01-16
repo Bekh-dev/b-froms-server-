@@ -8,7 +8,7 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:5173', 'https://bekh-dev.github.io', 'https://b-forms-client.onrender.com'],
+  origin: ['http://localhost:3000', 'http://localhost:5173', 'https://bekh-dev.github.io/b-forms-client'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
