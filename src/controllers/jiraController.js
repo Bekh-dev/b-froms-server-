@@ -1,272 +1,180 @@
-const axios = require('axios');
+import axios from 'axios';
+import dotenv from 'dotenv';
 
-const getAccountId = async (auth) => {
-    try {
-        const response = await axios.get(
-            `${process.env.JIRA_DOMAIN}/rest/api/2/myself`,
-            { auth }
-        );
-        console.log('Account info:', {
-            displayName: response.data.displayName,
-            accountId: response.data.accountId,
-            emailAddress: response.data.emailAddress
-        });
-        return response.data.accountId;
-    } catch (error) {
-        console.error('Error fetching account info:', error.response?.data);
-        throw error;
-    }
+dotenv.config();
+
+const JIRA_DOMAIN = process.env.JIRA_DOMAIN;
+const JIRA_EMAIL = process.env.JIRA_EMAIL;
+const JIRA_API_TOKEN = process.env.JIRA_API_TOKEN;
+const JIRA_PROJECT_KEY = process.env.JIRA_PROJECT_KEY;
+
+const jiraApi = axios.create({
+  baseURL: `https://${JIRA_DOMAIN}/rest/api/3`,
+  auth: {
+    username: JIRA_EMAIL,
+    password: JIRA_API_TOKEN
+  },
+  headers: {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json'
+  }
+});
+
+const getPriorityId = async (priorityName) => {
+  try {
+    const response = await jiraApi.get('/priority');
+    const priorities = response.data;
+    const priority = priorities.find(p => p.name === priorityName);
+    return priority ? priority.id : '3'; // Default to Medium (3) if not found
+  } catch (error) {
+    console.error('Error fetching priorities:', error);
+    return '3'; // Default to Medium (3) if error
+  }
 };
 
-const getIssueTypes = async (auth) => {
-    try {
-        const response = await axios.get(
-            `${process.env.JIRA_DOMAIN}/rest/api/2/issuetype`,
-            { auth }
-        );
-        console.log('Available issue types:', response.data);
-        return response.data;
-    } catch (error) {
-        console.error('Error fetching issue types:', error.response?.data);
-        throw error;
-    }
+const getAccountId = async (email) => {
+  try {
+    const response = await jiraApi.get(`/user/search?query=${encodeURIComponent(email)}`);
+    return response.data[0]?.accountId;
+  } catch (error) {
+    console.error('Error fetching account ID:', error);
+    return null;
+  }
 };
 
-const getPriorityId = async (priorityName, auth) => {
-    try {
-        const response = await axios.get(
-            `${process.env.JIRA_DOMAIN}/rest/api/2/priority`,
-            { auth }
-        );
-        const priorities = response.data;
-        const priority = priorities.find(p => p.name === priorityName);
-        return priority ? priority.id : '3'; // Default to Medium (3) if not found
-    } catch (error) {
-        console.error('Error fetching priorities:', error);
-        return '3'; // Default to Medium (3) if error
-    }
+const getIssueTypes = async () => {
+  try {
+    const response = await jiraApi.get('/issuetype');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching issue types:', error);
+    return [];
+  }
 };
 
 const createJiraTicket = async (req, res) => {
-    try {
-        const { summary, description, reporter, pageUrl, priority = 'Medium' } = req.body;
+  try {
+    const { summary, description, reporter, pageUrl, priority = 'Medium' } = req.body;
 
-        console.log('Request body:', req.body);
-        console.log('Creating Jira ticket with data:', {
-            summary,
-            description,
-            reporter,
-            pageUrl,
-            priority
-        });
+    // Get account ID for the reporter
+    const reporterAccountId = await getAccountId(reporter);
 
-        console.log('Using Jira config:', {
-            domain: process.env.JIRA_DOMAIN,
-            email: process.env.JIRA_EMAIL,
-            projectKey: process.env.JIRA_PROJECT_KEY,
-            hasToken: !!process.env.JIRA_API_TOKEN
-        });
-
-        if (!process.env.JIRA_DOMAIN) {
-            throw new Error('JIRA_DOMAIN is not configured');
-        }
-
-        if (!process.env.JIRA_PROJECT_KEY) {
-            throw new Error('JIRA_PROJECT_KEY is not configured');
-        }
-
-        if (!process.env.JIRA_EMAIL) {
-            throw new Error('JIRA_EMAIL is not configured');
-        }
-
-        if (!process.env.JIRA_API_TOKEN) {
-            throw new Error('JIRA_API_TOKEN is not configured');
-        }
-
-        if (!summary) {
-            throw new Error('Summary is required');
-        }
-
-        if (!description) {
-            throw new Error('Description is required');
-        }
-
-        if (!reporter) {
-            throw new Error('Reporter is required');
-        }
-
-        const auth = {
-            username: process.env.JIRA_EMAIL,
-            password: process.env.JIRA_API_TOKEN
-        };
-
-        // Получаем список типов задач
-        const issueTypes = await getIssueTypes(auth);
-        console.log('Found issue types:', issueTypes.map(t => t.name));
-
-        // Ищем тип задачи "Задача"
-        const taskType = issueTypes.find(t => t.name === "Задача");
-        if (!taskType) {
-            throw new Error('Task issue type not found');
-        }
-
-        // Получаем ID аккаунта
-        const accountId = await getAccountId(auth);
-
-        // Получаем ID приоритета
-        const priorityId = await getPriorityId(priority, auth);
-
-        // Формируем расширенное описание
-        const fullDescription = `
-${description}
-
-Additional Information:
-- Page URL: ${pageUrl || 'N/A'}
-- Reported by: ${reporter}
-- Created via: B-Forms Application
-`;
-
-        const jiraTicketData = {
-            fields: {
-                project: {
-                    key: process.env.JIRA_PROJECT_KEY
-                },
-                summary: summary,
-                description: fullDescription,
-                issuetype: {
-                    id: taskType.id
-                },
-                reporter: {
-                    id: accountId
-                },
-                priority: {
-                    id: priorityId
-                }
-            }
-        };
-
-        console.log('Sending to Jira:', JSON.stringify(jiraTicketData, null, 2));
-        console.log('Jira API URL:', `${process.env.JIRA_DOMAIN}/rest/api/2/issue`);
-
-        const response = await axios.post(
-            `${process.env.JIRA_DOMAIN}/rest/api/2/issue`,
-            jiraTicketData,
-            { auth }
-        );
-
-        console.log('Jira response:', response.data);
-        res.status(201).json(response.data);
-    } catch (error) {
-        console.error('Error creating Jira ticket:', {
-            message: error.message,
-            response: error.response?.data,
-            stack: error.stack,
-            config: error.config ? {
-                url: error.config.url,
-                method: error.config.method,
-                data: JSON.stringify(error.config.data, null, 2)
-            } : undefined
-        });
-
-        // Если это ошибка валидации данных
-        if (error.message.includes('is required')) {
-            return res.status(400).json({ 
-                message: 'Validation error',
-                error: error.message
-            });
-        }
-
-        // Если это ошибка от Jira API
-        if (error.response?.data) {
-            return res.status(error.response.status || 500).json({ 
-                message: 'Failed to create Jira ticket',
-                error: error.response.data
-            });
-        }
-
-        // Если это ошибка конфигурации
-        if (error.message.includes('is not configured')) {
-            return res.status(500).json({ 
-                message: 'Server configuration error',
-                error: error.message
-            });
-        }
-
-        // Для всех остальных ошибок
-        res.status(500).json({ 
-            message: 'Failed to create Jira ticket',
-            error: error.message
-        });
+    if (!reporterAccountId) {
+      return res.status(400).json({ message: 'Reporter not found' });
     }
+
+    // Get priority ID
+    const priorityId = await getPriorityId(priority);
+
+    // Get issue types
+    const issueTypes = await getIssueTypes();
+    const taskType = issueTypes.find(t => t.name === "Задача");
+    if (!taskType) {
+      throw new Error('Task issue type not found');
+    }
+
+    const issueData = {
+      fields: {
+        project: {
+          key: JIRA_PROJECT_KEY
+        },
+        summary: summary,
+        description: {
+          type: 'doc',
+          version: 1,
+          content: [
+            {
+              type: 'paragraph',
+              content: [
+                {
+                  type: 'text',
+                  text: `${description}\n\nPage URL: ${pageUrl}`
+                }
+              ]
+            }
+          ]
+        },
+        issuetype: {
+          id: taskType.id
+        },
+        reporter: {
+          id: reporterAccountId
+        },
+        priority: {
+          id: priorityId
+        }
+      }
+    };
+
+    const response = await jiraApi.post('/issue', issueData);
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error creating Jira ticket:', error.response?.data || error.message);
+    res.status(error.response?.status || 500).json({
+      message: 'Failed to create Jira ticket',
+      error: error.response?.data || error.message
+    });
+  }
 };
 
-export const getUserTickets = async (req, res) => {
-    try {
-        const { email } = req.params;
-        const { startAt = 0 } = req.query;
-        const auth = {
-            username: process.env.JIRA_EMAIL,
-            password: process.env.JIRA_API_TOKEN
-        };
+const getUserTickets = async (req, res) => {
+  try {
+    const { email } = req.params;
+    const { startAt = 0 } = req.query;
 
-        console.log('Fetching tickets for email:', email);
+    console.log('Fetching tickets for email:', email);
 
-        // Get account ID for the user
-        const accountIdResponse = await axios.get(
-            `${process.env.JIRA_DOMAIN}/rest/api/3/user/search?query=${encodeURIComponent(email)}`,
-            { auth }
-        );
-        
-        const accountId = accountIdResponse.data[0]?.accountId;
-        console.log('Found account ID:', accountId);
+    // Get account ID for the user
+    const accountId = await getAccountId(email);
 
-        if (!accountId) {
-            return res.status(400).json({ message: 'User not found' });
-        }
-
-        // Construct JQL query
-        const jql = `project = "${process.env.JIRA_PROJECT_KEY}" AND reporter = "${accountId}" ORDER BY created DESC`;
-        console.log('JQL Query:', jql);
-
-        // Search for issues
-        const response = await axios.get(
-            `${process.env.JIRA_DOMAIN}/rest/api/3/search`,
-            {
-                auth,
-                params: {
-                    jql,
-                    startAt,
-                    maxResults: 50,
-                    fields: 'summary,description,priority,status,created,updated'
-                }
-            }
-        );
-
-        console.log('Found tickets:', response.data.total);
-
-        res.json({
-            total: response.data.total,
-            tickets: response.data.issues.map(issue => ({
-                id: issue.id,
-                key: issue.key,
-                summary: issue.fields.summary,
-                description: issue.fields.description,
-                priority: issue.fields.priority?.name,
-                status: issue.fields.status?.name,
-                created: issue.fields.created,
-                updated: issue.fields.updated
-            }))
-        });
-    } catch (error) {
-        console.error('Error fetching tickets:', error.response?.data || error);
-        res.status(error.response?.status || 500).json({
-            message: 'Failed to fetch tickets',
-            error: error.response?.data || error.message
-        });
+    if (!accountId) {
+      return res.status(400).json({ message: 'User not found' });
     }
+
+    console.log('Found account ID:', accountId);
+
+    // Construct JQL query
+    const jql = `project = "${JIRA_PROJECT_KEY}" AND reporter = "${accountId}" ORDER BY created DESC`;
+    console.log('Using JQL:', jql);
+
+    // Search for issues
+    const response = await jiraApi.get('/search', {
+      params: {
+        jql,
+        startAt,
+        maxResults: 50,
+        fields: 'summary,description,priority,status,created,updated'
+      }
+    });
+
+    console.log('Found tickets:', response.data.total);
+
+    // Transform the response
+    const tickets = response.data.issues.map(issue => ({
+      id: issue.id,
+      key: issue.key,
+      summary: issue.fields.summary,
+      description: issue.fields.description?.content?.[0]?.content?.[0]?.text || '',
+      priority: issue.fields.priority?.name || 'Medium',
+      status: issue.fields.status?.name || 'To Do',
+      created: issue.fields.created,
+      updated: issue.fields.updated
+    }));
+
+    res.json({
+      total: response.data.total,
+      tickets: tickets
+    });
+  } catch (error) {
+    console.error('Error fetching tickets:', error.response?.data || error.message);
+    res.status(error.response?.status || 500).json({
+      message: 'Failed to fetch tickets',
+      error: error.response?.data || error.message
+    });
+  }
 };
 
 module.exports = {
-    createJiraTicket,
-    getUserTickets
+  createJiraTicket,
+  getUserTickets
 };

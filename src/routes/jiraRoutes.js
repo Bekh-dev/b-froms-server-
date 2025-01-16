@@ -1,9 +1,10 @@
-const express = require('express');
+import express from 'express';
+import { createJiraTicket, getUserTickets } from '../controllers/jiraController.js';
+import { protect } from '../middleware/authMiddleware.js';
+
 const router = express.Router();
-const { createJiraTicket, getUserTickets } = require('../controllers/jiraController');
-const authMiddleware = require('../middleware/auth');
 
-router.post('/tickets', authMiddleware, createJiraTicket);
-router.get('/tickets/:email', authMiddleware, getUserTickets);
+router.post('/tickets', protect, createJiraTicket);
+router.get('/tickets/:email', protect, getUserTickets);
 
-module.exports = router;
+export default router;
