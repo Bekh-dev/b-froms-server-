@@ -6,13 +6,14 @@ const morgan = require('morgan');
 
 const auth = require('./routes/auth');
 const templateRoutes = require('./routes/templateRoutes');
+const jiraRoutes = require('./routes/jiraRoutes');
 
 const app = express();
 
 // Middleware
 app.use(morgan('dev'));
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:5173', 'https://bekh-dev.github.io'],
+  origin: ['http://localhost:3000', 'http://localhost:5173', 'https://bekh-dev.github.io', 'https://b-forms-client.onrender.com'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -22,6 +23,7 @@ app.use(express.json());
 // Routes
 app.use('/api/auth', auth);
 app.use('/api/templates', templateRoutes);
+app.use('/api/jira', jiraRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
