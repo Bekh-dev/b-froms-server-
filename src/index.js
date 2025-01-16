@@ -7,7 +7,12 @@ const path = require('path');
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:3000', 'http://localhost:5173', 'https://bekh-dev.github.io', 'https://b-forms-client.onrender.com'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 // Connect to MongoDB
@@ -35,6 +40,7 @@ mongoose.connection.on('disconnected', () => {
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/templates', require('./routes/templates'));
+app.use('/api/jira', require('./routes/jiraRoutes'));
 
 // Error handling middleware
 app.use((err, req, res, next) => {
