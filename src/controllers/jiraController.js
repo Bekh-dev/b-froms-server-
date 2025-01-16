@@ -70,10 +70,10 @@ const createJiraTicket = async (req, res) => {
         const issueTypes = await getIssueTypes(auth);
         console.log('Found issue types:', issueTypes.map(t => t.name));
 
-        // Ищем тип задачи "Баг" или "Bug"
-        const bugType = issueTypes.find(t => t.name === "Баг" || t.name === "Bug");
-        if (!bugType) {
-            throw new Error('Bug issue type not found');
+        // Ищем тип задачи "Задача"
+        const taskType = issueTypes.find(t => t.name === "Задача");
+        if (!taskType) {
+            throw new Error('Task issue type not found');
         }
 
         // Формируем расширенное описание
@@ -93,7 +93,7 @@ Additional Information:
                 summary: summary,
                 description: fullDescription,
                 issuetype: {
-                    id: bugType.id
+                    id: taskType.id
                 },
                 reporter: {
                     emailAddress: reporter
