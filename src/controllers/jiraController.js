@@ -1,5 +1,19 @@
 const axios = require('axios');
 
+const getIssueTypes = async (auth) => {
+    try {
+        const response = await axios.get(
+            `${process.env.JIRA_DOMAIN}/rest/api/2/issuetype`,
+            { auth }
+        );
+        console.log('Available issue types:', response.data);
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching issue types:', error.response?.data);
+        throw error;
+    }
+};
+
 const createJiraTicket = async (req, res) => {
     try {
         const { summary, description, reporter, pageUrl } = req.body;
@@ -47,6 +61,21 @@ const createJiraTicket = async (req, res) => {
             throw new Error('Reporter is required');
         }
 
+        const auth = {
+            username: process.env.JIRA_EMAIL,
+            password: process.env.JIRA_API_TOKEN
+        };
+
+        // Получаем список типов задач
+        const issueTypes = await getIssueTypes(auth);
+        console.log('Found issue types:', issueTypes.map(t => t.name));
+
+        // Ищем тип задачи "Баг" или "Bug"
+        const bugType = issueTypes.find(t => t.name === "Баг" || t.name === "Bug");
+        if (!bugType) {
+            throw new Error('Bug issue type not found');
+        }
+
         // Формируем расширенное описание
         const fullDescription = `
 ${description}
@@ -64,14 +93,11 @@ Additional Information:
                 summary: summary,
                 description: fullDescription,
                 issuetype: {
-                    name: "Баг"
+                    id: bugType.id
                 },
                 reporter: {
                     emailAddress: reporter
                 }
-            },
-            update: {
-                priority: [{ set: null }]
             }
         };
 
@@ -81,12 +107,7 @@ Additional Information:
         const response = await axios.post(
             `${process.env.JIRA_DOMAIN}/rest/api/2/issue`,
             jiraTicketData,
-            {
-                auth: {
-                    username: process.env.JIRA_EMAIL,
-                    password: process.env.JIRA_API_TOKEN
-                }
-            }
+            { auth }
         );
 
         console.log('Jira response:', response.data);
