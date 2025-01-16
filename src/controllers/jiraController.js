@@ -18,21 +18,6 @@ const getAccountId = async (auth) => {
     }
 };
 
-const getPriorityId = async (priorityName, auth) => {
-    try {
-        const response = await axios.get(
-            `${process.env.JIRA_DOMAIN}/rest/api/2/priority`,
-            { auth }
-        );
-        console.log('Available priorities:', response.data.map(p => p.name));
-        const priority = response.data.find(p => p.name === priorityName);
-        return priority ? priority.id : null;
-    } catch (error) {
-        console.error('Error fetching priorities:', error.response?.data);
-        throw error;
-    }
-};
-
 const getIssueTypes = async (auth) => {
     try {
         const response = await axios.get(
@@ -49,15 +34,14 @@ const getIssueTypes = async (auth) => {
 
 const createJiraTicket = async (req, res) => {
     try {
-        const { summary, description, reporter, pageUrl, priority = 'Medium' } = req.body;
+        const { summary, description, reporter, pageUrl } = req.body;
 
         console.log('Request body:', req.body);
         console.log('Creating Jira ticket with data:', {
             summary,
             description,
             reporter,
-            pageUrl,
-            priority
+            pageUrl
         });
 
         console.log('Using Jira config:', {
@@ -110,12 +94,6 @@ const createJiraTicket = async (req, res) => {
             throw new Error('Task issue type not found');
         }
 
-        // Получаем ID приоритета
-        const priorityId = await getPriorityId(priority, auth);
-        if (!priorityId) {
-            console.warn(`Priority "${priority}" not found, using default priority`);
-        }
-
         // Получаем ID аккаунта
         const accountId = await getAccountId(auth);
 
@@ -144,13 +122,6 @@ Additional Information:
                 }
             }
         };
-
-        // Добавляем приоритет, если он найден
-        if (priorityId) {
-            jiraTicketData.fields.priority = {
-                id: priorityId
-            };
-        }
 
         console.log('Sending to Jira:', JSON.stringify(jiraTicketData, null, 2));
         console.log('Jira API URL:', `${process.env.JIRA_DOMAIN}/rest/api/2/issue`);
