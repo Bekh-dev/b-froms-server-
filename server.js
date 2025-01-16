@@ -4,9 +4,9 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const morgan = require('morgan');
 
-const auth = require('./routes/auth');
-const templateRoutes = require('./routes/templateRoutes');
-const jiraRoutes = require('./routes/jiraRoutes');
+const auth = require('./src/routes/auth');
+const templateRoutes = require('./src/routes/templates');
+const jiraRoutes = require('./src/routes/jiraRoutes');
 
 const app = express();
 
