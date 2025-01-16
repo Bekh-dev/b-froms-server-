@@ -3,17 +3,19 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
+const morgan = require('morgan');
 
 const app = express();
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:5173', 'https://bekh-dev.github.io'],
+  origin: process.env.CLIENT_URL || 'http://localhost:3000',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Access-Control-Allow-Origin']
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
+app.use(morgan('dev'));
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI, {
@@ -37,8 +39,10 @@ mongoose.connection.on('disconnected', () => {
   console.log('MongoDB disconnected. Attempting to reconnect...');
 });
 
-// CORS preflight
-app.options('*', cors());
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
@@ -79,6 +83,8 @@ const PORT = process.env.PORT || 5000;
 
 const server = app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
+  console.log('CORS origin:', process.env.CLIENT_URL || 'http://localhost:3000');
+  console.log('MongoDB connected');
 });
 
 // Handle server shutdown
