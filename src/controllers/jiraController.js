@@ -64,7 +64,7 @@ Additional Information:
                 summary: summary,
                 description: fullDescription,
                 issuetype: {
-                    name: "Bug"
+                    name: "Баг"
                 },
                 reporter: {
                     emailAddress: reporter
