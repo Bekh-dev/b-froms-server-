@@ -1,5 +1,23 @@
 const axios = require('axios');
 
+const getAccountId = async (auth) => {
+    try {
+        const response = await axios.get(
+            `${process.env.JIRA_DOMAIN}/rest/api/2/myself`,
+            { auth }
+        );
+        console.log('Account info:', {
+            displayName: response.data.displayName,
+            accountId: response.data.accountId,
+            emailAddress: response.data.emailAddress
+        });
+        return response.data.accountId;
+    } catch (error) {
+        console.error('Error fetching account info:', error.response?.data);
+        throw error;
+    }
+};
+
 const getIssueTypes = async (auth) => {
     try {
         const response = await axios.get(
@@ -82,8 +100,11 @@ ${description}
 
 Additional Information:
 - Page URL: ${pageUrl || 'N/A'}
-- Reporter: ${reporter}
+- Reported by: ${reporter}
+- Created via: B-Forms Application
 `;
+
+        const accountId = await getAccountId(auth);
 
         const jiraTicketData = {
             fields: {
@@ -96,7 +117,7 @@ Additional Information:
                     id: taskType.id
                 },
                 reporter: {
-                    emailAddress: reporter
+                    id: accountId
                 }
             }
         };
