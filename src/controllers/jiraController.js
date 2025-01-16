@@ -200,99 +200,68 @@ Additional Information:
     }
 };
 
-const getUserTickets = async (req, res) => {
+export const getUserTickets = async (req, res) => {
     try {
         const { email } = req.params;
         const { startAt = 0 } = req.query;
+        const auth = {
+            username: process.env.JIRA_EMAIL,
+            password: process.env.JIRA_API_TOKEN
+        };
 
-        console.log('Fetching tickets for:', {
-            email,
-            startAt
-        });
+        console.log('Fetching tickets for email:', email);
 
-        if (!email) {
-            throw new Error('Email is required');
-        }
-
-        const jql = `reporter = "${email}" ORDER BY created DESC`;
+        // Get account ID for the user
+        const accountIdResponse = await axios.get(
+            `${process.env.JIRA_DOMAIN}/rest/api/3/user/search?query=${encodeURIComponent(email)}`,
+            { auth }
+        );
         
-        console.log('Fetching Jira tickets with JQL:', jql);
+        const accountId = accountIdResponse.data[0]?.accountId;
+        console.log('Found account ID:', accountId);
 
-        console.log('Using Jira config:', {
-            domain: process.env.JIRA_DOMAIN,
-            email: process.env.JIRA_EMAIL,
-            hasToken: !!process.env.JIRA_API_TOKEN
-        });
-
-        if (!process.env.JIRA_DOMAIN) {
-            throw new Error('JIRA_DOMAIN is not configured');
+        if (!accountId) {
+            return res.status(400).json({ message: 'User not found' });
         }
 
-        if (!process.env.JIRA_EMAIL) {
-            throw new Error('JIRA_EMAIL is not configured');
-        }
+        // Construct JQL query
+        const jql = `project = "${process.env.JIRA_PROJECT_KEY}" AND reporter = "${accountId}" ORDER BY created DESC`;
+        console.log('JQL Query:', jql);
 
-        if (!process.env.JIRA_API_TOKEN) {
-            throw new Error('JIRA_API_TOKEN is not configured');
-        }
-
+        // Search for issues
         const response = await axios.get(
-            `${process.env.JIRA_DOMAIN}/rest/api/2/search`,
+            `${process.env.JIRA_DOMAIN}/rest/api/3/search`,
             {
+                auth,
                 params: {
-                    jql: jql,
+                    jql,
+                    startAt,
                     maxResults: 50,
-                    startAt: parseInt(startAt, 10)
-                },
-                auth: {
-                    username: process.env.JIRA_EMAIL,
-                    password: process.env.JIRA_API_TOKEN
+                    fields: 'summary,description,priority,status,created,updated'
                 }
             }
         );
 
-        console.log('Jira response:', response.data);
-        res.json(response.data);
-    } catch (error) {
-        console.error('Error fetching Jira tickets:', {
-            message: error.message,
-            response: error.response?.data,
-            stack: error.stack,
-            config: error.config ? {
-                url: error.config.url,
-                method: error.config.method,
-                params: error.config.params
-            } : undefined
+        console.log('Found tickets:', response.data.total);
+
+        res.json({
+            total: response.data.total,
+            tickets: response.data.issues.map(issue => ({
+                id: issue.id,
+                key: issue.key,
+                summary: issue.fields.summary,
+                description: issue.fields.description,
+                priority: issue.fields.priority?.name,
+                status: issue.fields.status?.name,
+                created: issue.fields.created,
+                updated: issue.fields.updated
+            }))
         });
-
-        // Если это ошибка валидации данных
-        if (error.message.includes('is required')) {
-            return res.status(400).json({ 
-                message: 'Validation error',
-                error: error.message
-            });
-        }
-
-        // Если это ошибка от Jira API
-        if (error.response?.data) {
-            return res.status(error.response.status || 500).json({ 
-                message: 'Failed to fetch Jira tickets',
-                error: error.response.data
-            });
-        }
-
-        // Если это ошибка конфигурации
-        if (error.message.includes('is not configured')) {
-            return res.status(500).json({ 
-                message: 'Server configuration error',
-                error: error.message
-            });
-        }
-
-        // Для всех остальных ошибок
-        res.status(500).json({ 
-            message: 'Failed to fetch Jira tickets',
-            error: error.message
+    } catch (error) {
+        console.error('Error fetching tickets:', error.response?.data || error);
+        res.status(error.response?.status || 500).json({
+            message: 'Failed to fetch tickets',
+            error: error.response?.data || error.message
         });
     }
 };
