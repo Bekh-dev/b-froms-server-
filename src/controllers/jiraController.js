@@ -32,16 +32,32 @@ const getIssueTypes = async (auth) => {
     }
 };
 
+const getPriorityId = async (priorityName, auth) => {
+    try {
+        const response = await axios.get(
+            `${process.env.JIRA_DOMAIN}/rest/api/2/priority`,
+            { auth }
+        );
+        const priorities = response.data;
+        const priority = priorities.find(p => p.name === priorityName);
+        return priority ? priority.id : '3'; // Default to Medium (3) if not found
+    } catch (error) {
+        console.error('Error fetching priorities:', error);
+        return '3'; // Default to Medium (3) if error
+    }
+};
+
 const createJiraTicket = async (req, res) => {
     try {
-        const { summary, description, reporter, pageUrl } = req.body;
+        const { summary, description, reporter, pageUrl, priority = 'Medium' } = req.body;
 
         console.log('Request body:', req.body);
         console.log('Creating Jira ticket with data:', {
             summary,
             description,
             reporter,
-            pageUrl
+            pageUrl,
+            priority
         });
 
         console.log('Using Jira config:', {
@@ -97,6 +113,9 @@ const createJiraTicket = async (req, res) => {
         // Получаем ID аккаунта
         const accountId = await getAccountId(auth);
 
+        // Получаем ID приоритета
+        const priorityId = await getPriorityId(priority, auth);
+
         // Формируем расширенное описание
         const fullDescription = `
 ${description}
@@ -119,6 +138,9 @@ Additional Information:
                 },
                 reporter: {
                     id: accountId
+                },
+                priority: {
+                    id: priorityId
                 }
             }
         };
