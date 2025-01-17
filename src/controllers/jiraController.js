@@ -104,10 +104,13 @@ const createJiraTicket = async (req, res) => {
 
     // Get issue types
     const issueTypes = await getIssueTypes();
-    const taskType = issueTypes.find(t => t.name === 'Task') || issueTypes[0];
+    console.log('Available issue types:', issueTypes.map(t => t.name));
+    const taskType = issueTypes.find(t => t.name === 'Задача') || issueTypes[0];
     if (!taskType) {
+      console.error('No valid issue type found. Available types:', issueTypes);
       throw new Error('No valid issue type found');
     }
+    console.log('Using issue type:', taskType);
 
     const issueData = {
       fields: {
