@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const fieldSchema = new mongoose.Schema({
+const questionSchema = new mongoose.Schema({
   type: {
     type: String,
     required: true,
@@ -42,7 +42,7 @@ const templateSchema = new mongoose.Schema({
     type: String,
     trim: true
   }],
-  fields: [fieldSchema],
+  questions: [questionSchema],
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -56,10 +56,33 @@ const templateSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  submissions: [{
+  shareableLink: {
+    type: String,
+    default: null
+  },
+  sharedWith: [{
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    accessType: {
+      type: String,
+      enum: ['view', 'edit'],
+      default: 'view'
+    }
+  }],
+  responses: [{
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Submission'
-  }]
+    ref: 'Response'
+  }],
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
+  }
 }, {
   timestamps: true
 });
@@ -71,12 +94,18 @@ templateSchema.index({
   tags: 'text' 
 });
 
+// Middleware to update the updatedAt field
+templateSchema.pre('save', function(next) {
+  this.updatedAt = Date.now();
+  next();
+});
+
 // Pre-save middleware to validate fields
 templateSchema.pre('save', function(next) {
   // Validate that select, radio, and checkbox fields have options
-  const hasInvalidField = this.fields.some(field => {
-    if (['select', 'radio', 'checkbox'].includes(field.type)) {
-      return !field.options || field.options.length === 0;
+  const hasInvalidField = this.questions.some(question => {
+    if (['select', 'radio', 'checkbox'].includes(question.type)) {
+      return !question.options || question.options.length === 0;
     }
     return false;
   });
@@ -90,12 +119,17 @@ templateSchema.pre('save', function(next) {
 
 // Method to check if user can access template
 templateSchema.methods.canAccess = function(userId) {
-  return this.isPublished || this.user.toString() === userId;
+  return this.isPublished || 
+         this.user.toString() === userId || 
+         this.sharedWith.some(share => share.user.toString() === userId);
 };
 
 // Method to check if user can edit template
 templateSchema.methods.canEdit = function(userId) {
-  return this.user.toString() === userId;
+  return this.user.toString() === userId || 
+         this.sharedWith.some(share => 
+           share.user.toString() === userId && share.accessType === 'edit'
+         );
 };
 
 const Template = mongoose.model('Template', templateSchema);

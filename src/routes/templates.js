@@ -9,10 +9,12 @@ const Template = require('../models/Template');
 // @access  Public
 router.get('/public', async (req, res) => {
   try {
+    console.log('Getting public templates');
     const templates = await Template.find({ 
       isPublished: true, 
       isArchived: false 
     }).populate('user', 'name email');
+    console.log('Found public templates:', templates.length);
     res.json(templates);
   } catch (err) {
     console.error('Error getting public templates:', err);
@@ -25,9 +27,12 @@ router.get('/public', async (req, res) => {
 // @access  Private
 router.get('/my', auth, async (req, res) => {
   try {
+    console.log('Getting templates for user:', req.user.id);
     const templates = await Template.find({ 
-      user: req.user.id 
+      user: req.user.id,
+      isArchived: false
     }).populate('user', 'name email');
+    console.log('Found user templates:', templates.length);
     res.json(templates);
   } catch (err) {
     console.error('Error getting user templates:', err);
@@ -40,22 +45,27 @@ router.get('/my', auth, async (req, res) => {
 // @access  Private
 router.get('/:id', auth, async (req, res) => {
   try {
+    console.log('Getting template by ID:', req.params.id);
     if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
+      console.error('Invalid template ID:', req.params.id);
       return res.status(400).json({ message: 'Invalid template ID' });
     }
 
     const template = await Template.findById(req.params.id)
-      .populate('user', 'name email');
+      .populate('user', 'name email')
+      .populate('sharedWith.user', 'name email');
       
     if (!template) {
+      console.error('Template not found:', req.params.id);
       return res.status(404).json({ message: 'Template not found' });
     }
     
-    // Check if template is public or belongs to user
-    if (!template.isPublished && template.user._id.toString() !== req.user.id) {
+    if (!template.canAccess(req.user.id)) {
+      console.error('Access denied to template:', req.params.id);
       return res.status(403).json({ message: 'Access denied' });
     }
     
+    console.log('Template found:', template._id);
     res.json(template);
   } catch (err) {
     console.error('Error getting template:', err);
@@ -72,34 +82,41 @@ router.post(
     auth,
     [
       check('title', 'Title is required').not().isEmpty(),
-      check('fields', 'Fields must be an array').isArray()
+      check('questions', 'Questions must be an array').isArray()
     ]
   ],
   async (req, res) => {
     try {
+      console.log('Creating template with data:', req.body);
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
+        console.error('Validation errors:', errors.array());
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { title, description, tags, fields } = req.body;
+      const { title, description, tags, questions, isPublished } = req.body;
 
       const template = new Template({
         title,
         description: description || '',
         tags: tags || [],
-        fields: fields || [],
+        questions,
         user: req.user.id,
-        isPublished: false,
-        isArchived: false
+        isPublished: isPublished || false
       });
 
-      const savedTemplate = await template.save();
-      await savedTemplate.populate('user', 'name email');
-      
-      res.json(savedTemplate);
+      await template.save();
+      console.log('Template created:', template._id);
+
+      const populatedTemplate = await Template.findById(template._id)
+        .populate('user', 'name email');
+
+      res.json(populatedTemplate);
     } catch (err) {
       console.error('Error creating template:', err);
+      if (err.name === 'ValidationError') {
+        return res.status(400).json({ message: err.message });
+      }
       res.status(500).json({ message: 'Server error' });
     }
   }
@@ -110,37 +127,45 @@ router.post(
 // @access  Private
 router.put('/:id', auth, async (req, res) => {
   try {
+    console.log('Updating template:', req.params.id);
     if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
+      console.error('Invalid template ID:', req.params.id);
       return res.status(400).json({ message: 'Invalid template ID' });
     }
 
     const template = await Template.findById(req.params.id);
-    
+
     if (!template) {
+      console.error('Template not found:', req.params.id);
       return res.status(404).json({ message: 'Template not found' });
     }
 
-    // Make sure user owns template
-    if (template.user.toString() !== req.user.id) {
+    if (!template.canEdit(req.user.id)) {
+      console.error('Access denied to edit template:', req.params.id);
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    // Update fields
-    const { title, description, tags, fields, isPublished, isArchived } = req.body;
-    
-    if (title) template.title = title;
-    if (description !== undefined) template.description = description;
-    if (tags) template.tags = tags;
-    if (fields) template.fields = fields;
-    if (isPublished !== undefined) template.isPublished = isPublished;
-    if (isArchived !== undefined) template.isArchived = isArchived;
+    const { title, description, tags, questions, isPublished } = req.body;
 
-    const updatedTemplate = await template.save();
-    await updatedTemplate.populate('user', 'name email');
-    
-    res.json(updatedTemplate);
+    template.title = title || template.title;
+    template.description = description || template.description;
+    template.tags = tags || template.tags;
+    template.questions = questions || template.questions;
+    template.isPublished = isPublished !== undefined ? isPublished : template.isPublished;
+
+    await template.save();
+    console.log('Template updated:', template._id);
+
+    const populatedTemplate = await Template.findById(template._id)
+      .populate('user', 'name email')
+      .populate('sharedWith.user', 'name email');
+
+    res.json(populatedTemplate);
   } catch (err) {
     console.error('Error updating template:', err);
+    if (err.name === 'ValidationError') {
+      return res.status(400).json({ message: err.message });
+    }
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -150,25 +175,83 @@ router.put('/:id', auth, async (req, res) => {
 // @access  Private
 router.delete('/:id', auth, async (req, res) => {
   try {
+    console.log('Deleting template:', req.params.id);
     if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
+      console.error('Invalid template ID:', req.params.id);
       return res.status(400).json({ message: 'Invalid template ID' });
     }
 
     const template = await Template.findById(req.params.id);
-    
+
+    if (!template) {
+      console.error('Template not found:', req.params.id);
+      return res.status(404).json({ message: 'Template not found' });
+    }
+
+    if (!template.canEdit(req.user.id)) {
+      console.error('Access denied to delete template:', req.params.id);
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    // Soft delete by marking as archived
+    template.isArchived = true;
+    await template.save();
+    console.log('Template archived:', template._id);
+
+    res.json({ message: 'Template deleted' });
+  } catch (err) {
+    console.error('Error deleting template:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// @route   POST api/templates/:id/share
+// @desc    Share a template with another user
+// @access  Private
+router.post('/:id/share', auth, async (req, res) => {
+  try {
+    console.log('Sharing template:', req.params.id);
+    const { email, accessType } = req.body;
+
+    const template = await Template.findById(req.params.id);
     if (!template) {
       return res.status(404).json({ message: 'Template not found' });
     }
 
-    // Make sure user owns template
-    if (template.user.toString() !== req.user.id) {
+    if (!template.canEdit(req.user.id)) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    await Template.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Template deleted' });
+    const User = require('../models/User');
+    const targetUser = await User.findOne({ email });
+    if (!targetUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Check if already shared
+    const existingShare = template.sharedWith.find(
+      share => share.user.toString() === targetUser._id.toString()
+    );
+
+    if (existingShare) {
+      existingShare.accessType = accessType;
+    } else {
+      template.sharedWith.push({
+        user: targetUser._id,
+        accessType
+      });
+    }
+
+    await template.save();
+    console.log('Template shared successfully');
+
+    const populatedTemplate = await Template.findById(template._id)
+      .populate('user', 'name email')
+      .populate('sharedWith.user', 'name email');
+
+    res.json(populatedTemplate);
   } catch (err) {
-    console.error('Error deleting template:', err);
+    console.error('Error sharing template:', err);
     res.status(500).json({ message: 'Server error' });
   }
 });
