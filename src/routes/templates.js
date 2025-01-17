@@ -73,6 +73,39 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
+// @route   GET api/templates/:id/responses
+// @desc    Get responses for a template
+// @access  Private
+router.get('/:id/responses', auth, async (req, res) => {
+  try {
+    console.log('Getting responses for template:', req.params.id);
+    if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
+      console.error('Invalid template ID:', req.params.id);
+      return res.status(400).json({ message: 'Invalid template ID' });
+    }
+
+    const template = await Template.findById(req.params.id)
+      .populate('user', 'name email')
+      .populate('responses');
+      
+    if (!template) {
+      console.error('Template not found:', req.params.id);
+      return res.status(404).json({ message: 'Template not found' });
+    }
+    
+    if (!template.canAccess(req.user.id)) {
+      console.error('Access denied to template responses:', req.params.id);
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    
+    console.log('Found responses for template:', template.responses?.length || 0);
+    res.json(template.responses || []);
+  } catch (err) {
+    console.error('Error getting template responses:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // @route   POST api/templates
 // @desc    Create a template
 // @access  Private

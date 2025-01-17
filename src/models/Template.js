@@ -56,10 +56,6 @@ const templateSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  shareableLink: {
-    type: String,
-    default: null
-  },
   sharedWith: [{
     user: {
       type: mongoose.Schema.Types.ObjectId,
@@ -71,6 +67,10 @@ const templateSchema = new mongoose.Schema({
       default: 'view'
     }
   }],
+  shareableLink: {
+    type: String,
+    default: null
+  },
   responses: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Response'
