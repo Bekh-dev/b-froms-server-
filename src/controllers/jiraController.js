@@ -3,7 +3,8 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
-const JIRA_DOMAIN = process.env.JIRA_DOMAIN;
+// Remove https:// if present in JIRA_DOMAIN
+const JIRA_DOMAIN = process.env.JIRA_DOMAIN?.replace('https://', '');
 const JIRA_EMAIL = process.env.JIRA_EMAIL;
 const JIRA_API_TOKEN = process.env.JIRA_API_TOKEN;
 const JIRA_PROJECT_KEY = process.env.JIRA_PROJECT_KEY;
@@ -29,6 +30,30 @@ const jiraApi = axios.create({
   }
 });
 
+const getAccountId = async (email) => {
+  try {
+    console.log('Searching for account ID for email:', email);
+    const response = await jiraApi.get(`/user/search?query=${encodeURIComponent(email)}`);
+    console.log('Account search response:', response.data);
+    
+    if (!response.data || response.data.length === 0) {
+      console.error('No user found for email:', email);
+      return null;
+    }
+    
+    const accountId = response.data[0]?.accountId;
+    console.log('Found account ID:', accountId);
+    return accountId;
+  } catch (error) {
+    console.error('Error fetching account ID:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status
+    });
+    return null;
+  }
+};
+
 const getPriorityId = async (priorityName) => {
   try {
     const response = await jiraApi.get('/priority');
@@ -38,20 +63,6 @@ const getPriorityId = async (priorityName) => {
   } catch (error) {
     console.error('Error fetching priorities:', error.response?.data || error.message);
     return '3'; // Default to Medium (3) if error
-  }
-};
-
-const getAccountId = async (email) => {
-  try {
-    console.log('Searching for account ID for email:', email);
-    const response = await jiraApi.get(`/user/search?query=${encodeURIComponent(email)}`);
-    console.log('Account search response:', response.data);
-    const accountId = response.data[0]?.accountId;
-    console.log('Found account ID:', accountId);
-    return accountId;
-  } catch (error) {
-    console.error('Error fetching account ID:', error.response?.data || error.message);
-    return null;
   }
 };
 
@@ -84,7 +95,7 @@ const createJiraTicket = async (req, res) => {
     if (!reporterAccountId) {
       return res.status(400).json({ 
         message: 'Reporter not found',
-        error: `No Jira account found for email: ${JIRA_EMAIL}`
+        error: `No Jira account found for email: ${JIRA_EMAIL}. Please check your Jira configuration.`
       });
     }
 
@@ -93,7 +104,7 @@ const createJiraTicket = async (req, res) => {
 
     // Get issue types
     const issueTypes = await getIssueTypes();
-    const taskType = issueTypes.find(t => t.name === "Задача") || issueTypes[0];
+    const taskType = issueTypes.find(t => t.name === 'Task') || issueTypes[0];
     if (!taskType) {
       throw new Error('No valid issue type found');
     }
@@ -136,10 +147,14 @@ const createJiraTicket = async (req, res) => {
     console.log('Jira ticket created:', response.data);
     res.json(response.data);
   } catch (error) {
-    console.error('Error creating Jira ticket:', error.response?.data || error.message);
+    console.error('Error creating Jira ticket:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status
+    });
     res.status(error.response?.status || 500).json({
       message: 'Failed to create Jira ticket',
-      error: error.response?.data || error.message
+      error: error.response?.data?.errors || error.message
     });
   }
 };
@@ -165,7 +180,7 @@ const getUserTickets = async (req, res) => {
       console.error('User not found for email:', JIRA_EMAIL);
       return res.status(400).json({ 
         message: 'User not found',
-        error: `No Jira account found for email: ${JIRA_EMAIL}`
+        error: `No Jira account found for email: ${JIRA_EMAIL}. Please check your Jira configuration.`
       });
     }
 
@@ -228,10 +243,14 @@ const getUserTickets = async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Error fetching tickets:', error.response?.data || error.message);
+    console.error('Error fetching tickets:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status
+    });
     res.status(error.response?.status || 500).json({
       message: 'Failed to fetch tickets',
-      error: error.response?.data || error.message
+      error: error.response?.data?.errors || error.message
     });
   }
 };
