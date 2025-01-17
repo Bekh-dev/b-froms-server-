@@ -1,10 +1,13 @@
-import express from 'express';
-import { createJiraTicket, getUserTickets } from '../controllers/jiraController.js';
-import { protect } from '../middleware/authMiddleware.js';
+const express = require('express');
+const { protect } = require('../middleware/authMiddleware');
+const { createJiraTicket, getUserTickets } = require('../controllers/jiraController');
 
 const router = express.Router();
 
+// Create a new Jira ticket
 router.post('/tickets', protect, createJiraTicket);
-router.get('/tickets/:email', protect, getUserTickets);
 
-export default router;
+// Get user's tickets
+router.get('/tickets', protect, getUserTickets);
+
+module.exports = router;

@@ -54,10 +54,11 @@ const getIssueTypes = async () => {
 
 const createJiraTicket = async (req, res) => {
   try {
-    const { summary, description, reporter, pageUrl, priority = 'Medium' } = req.body;
+    const { summary, description, pageUrl, priority = 'Medium' } = req.body;
 
-    // Get account ID for the reporter
-    const reporterAccountId = await getAccountId(reporter);
+    // Always use JIRA_EMAIL as reporter
+    const reporterAccountId = await getAccountId(JIRA_EMAIL);
+    console.log('Using reporter:', JIRA_EMAIL, 'with accountId:', reporterAccountId);
 
     if (!reporterAccountId) {
       return res.status(400).json({ message: 'Reporter not found' });
@@ -88,7 +89,7 @@ const createJiraTicket = async (req, res) => {
               content: [
                 {
                   type: 'text',
-                  text: `${description}\n\nPage URL: ${pageUrl}`
+                  text: `${description}\n\nPage URL: ${pageUrl}\nSubmitted by: ${req.body.reporter || 'Anonymous'}`
                 }
               ]
             }
@@ -119,28 +120,18 @@ const createJiraTicket = async (req, res) => {
 
 const getUserTickets = async (req, res) => {
   try {
-    const { email } = req.params;
-    const { startAt = 0 } = req.query;
-
-    console.log('Fetching tickets for email:', email);
-
-    if (!email) {
-      console.error('No email provided');
-      return res.status(400).json({ 
-        message: 'Email is required',
-        error: 'No email provided in request parameters'
-      });
-    }
+    // Always use JIRA_EMAIL for fetching tickets
+    console.log('Fetching tickets for JIRA_EMAIL:', JIRA_EMAIL);
 
     // Get account ID for the user
-    const accountId = await getAccountId(email);
+    const accountId = await getAccountId(JIRA_EMAIL);
     console.log('Account ID:', accountId);
 
     if (!accountId) {
-      console.error('User not found for email:', email);
+      console.error('User not found for email:', JIRA_EMAIL);
       return res.status(400).json({ 
         message: 'User not found',
-        error: `No Jira account found for email: ${email}`
+        error: `No Jira account found for email: ${JIRA_EMAIL}`
       });
     }
 
@@ -153,7 +144,7 @@ const getUserTickets = async (req, res) => {
     const response = await jiraApi.get('/search', {
       params: {
         jql,
-        startAt: parseInt(startAt, 10),
+        startAt: parseInt(req.query.startAt || 0, 10),
         maxResults: 50,
         fields: 'summary,description,priority,status,created,updated'
       }
@@ -203,15 +194,10 @@ const getUserTickets = async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Error fetching tickets:', {
-      message: error.message,
-      response: error.response?.data,
-      stack: error.stack
-    });
-
+    console.error('Error fetching tickets:', error.response?.data || error.message);
     res.status(error.response?.status || 500).json({
       message: 'Failed to fetch tickets',
-      error: error.response?.data?.errorMessages || error.message
+      error: error.response?.data || error.message
     });
   }
 };
