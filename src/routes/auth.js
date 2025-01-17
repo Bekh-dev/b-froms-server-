@@ -3,7 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { check, validationResult } = require('express-validator');
-const auth = require('../middleware/auth');
+const { protect } = require('../middleware/authMiddleware');
 const User = require('../models/User');
 
 // @route   POST api/auth/register
@@ -49,11 +49,7 @@ router.post(
 
       res.json({
         token,
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email
-        }
+        user: user.toJSON()
       });
     } catch (err) {
       console.error('Register error:', err);
@@ -101,11 +97,7 @@ router.post(
 
       res.json({
         token,
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email
-        }
+        user: user.toJSON()
       });
     } catch (err) {
       console.error('Login error:', err);
@@ -117,7 +109,7 @@ router.post(
 // @route   GET api/auth/user
 // @desc    Get user data
 // @access  Private
-router.get('/user', auth, async (req, res) => {
+router.get('/user', protect, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('-password');
     res.json(user);
