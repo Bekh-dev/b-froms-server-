@@ -65,9 +65,17 @@ app.get('/health', (req, res) => {
 });
 
 // Routes
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/templates', require('./routes/templates'));
-app.use('/api/jira', require('./routes/jiraRoutes'));
+const authRoutes = require('./routes/auth');
+const templateRoutes = require('./routes/templates');
+const salesforceRoutes = require('./routes/salesforce');
+const responsesRoutes = require('./routes/responses');
+const jiraRoutes = require('./routes/jiraRoutes');
+
+app.use('/api/auth', authRoutes);
+app.use('/api/templates', templateRoutes);
+app.use('/api/salesforce', salesforceRoutes);
+app.use('/api/responses', responsesRoutes);
+app.use('/api/jira', jiraRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

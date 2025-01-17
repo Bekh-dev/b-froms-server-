@@ -30,7 +30,18 @@ const userSchema = new mongoose.Schema({
     default: false
   },
   resetPasswordToken: String,
-  resetPasswordExpires: Date
+  resetPasswordExpires: Date,
+  integrations: {
+    salesforce: {
+      accountId: String,
+      contactId: String,
+      synced: {
+        type: Boolean,
+        default: false
+      },
+      lastSync: Date
+    }
+  }
 }, {
   timestamps: true
 });
